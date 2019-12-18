@@ -1266,12 +1266,14 @@ class TestCVE2019_19844(TestCase):
 
 
 class TestResetPasswordForm(TestCase):
-    global_request = RequestFactory().get('/')
 
     def test_user_email_not_sent_inactive_user(self):
-        get_user_model().objects.create_user('mike123', 'mike@ixample.org', 'test123', is_active=False)
+        get_user_model().objects.create_user(
+            'mike123',
+            'mike@ixample.org',
+            'test123',
+            is_active=False)
         data = {'email': 'mike@ixample.org'}
         form = ResetPasswordForm(data)
-        self.assertTrue(form.is_valid())
-        form.save(self.global_request)
-        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(form.is_valid())
+
