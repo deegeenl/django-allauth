@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import json
+import unittest
 import uuid
 from datetime import timedelta
 
@@ -10,15 +11,15 @@ from django.contrib.auth.models import AbstractUser, AnonymousUser
 from django.contrib.sites.models import Site
 from django.core import mail, validators
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, connection
 from django.http import HttpResponseRedirect
 from django.template import Context, Template
 from django.test.client import Client, RequestFactory
-from django.test.utils import override_settings
+from django.test.utils import override_settings, modify_settings
 from django.urls import reverse
 from django.utils.timezone import now
 
-from allauth.account.forms import BaseSignupForm, SignupForm
+from allauth.account.forms import BaseSignupForm, SignupForm, ResetPasswordForm
 from allauth.account.models import (
     EmailAddress,
     EmailConfirmation,
@@ -1217,3 +1218,60 @@ class ConfirmationViewTests(TestCase):
                         args=[key]))
 
         assert mock_perform_login.called
+
+
+# To run these tests, you must:
+#   - Install a local PostgreSQL database and create a user with a role that can create databases
+#   - Run the local PostgreSQL database
+#   - Edit test_settings_postgres.py DATABASES attribute (near the top)
+#     for USER and PASSWORD using the user role above
+#   - pip install psycopg2
+#   - Run this test using the test_settings_postgres.py
+@unittest.skipUnless(connection.vendor == 'postgresql', "PostgreSQL specific tests")
+@modify_settings(INSTALLED_APPS={'append': 'django.contrib.postgres'})
+class TestCVE2019_19844(TestCase):
+    global_request = RequestFactory().get('/')
+
+    def test_user_email_unicode_collision(self):
+        get_user_model().objects.create_user('mike123', 'mike@example.org', 'test123')
+        get_user_model().objects.create_user('mike456', 'mıke@example.org', 'test123')
+        data = {'email': 'mıke@example.org'}
+        form = ResetPasswordForm(data)
+        self.assertTrue(form.is_valid())
+        form.save(self.global_request)
+        self.assertEqual(len(mail.outbox), 1)  # Fails: AssertionError: 2 != 1
+        self.assertEqual(mail.outbox[0].to, ['mıke@example.org'])
+
+    def test_user_email_domain_unicode_collision(self):
+        get_user_model().objects.create_user('mike123', 'mike@ixample.org', 'test123')
+        get_user_model().objects.create_user('mike456', 'mike@ıxample.org', 'test123')
+        data = {'email': 'mike@ıxample.org'}
+        form = ResetPasswordForm(data)
+        self.assertTrue(form.is_valid())
+        form.save(self.global_request)
+        self.assertEqual(len(mail.outbox), 1)  # Fails: AssertionError: 2 != 1
+        self.assertEqual(mail.outbox[0].to, ['mike@ıxample.org'])
+
+    def test_user_email_unicode_collision_nonexistent(self):
+        get_user_model().objects.create_user('mike123', 'mike@example.org', 'test123')
+        data = {'email': 'mıke@example.org'}
+        form = ResetPasswordForm(data)
+        self.assertFalse(form.is_valid())
+
+    def test_user_email_domain_unicode_collision_nonexistent(self):
+        get_user_model().objects.create_user('mike123', 'mike@ixample.org', 'test123')
+        data = {'email': 'mike@ıxample.org'}
+        form = ResetPasswordForm(data)
+        self.assertFalse(form.is_valid())
+
+
+class TestResetPasswordForm(TestCase):
+    global_request = RequestFactory().get('/')
+
+    def test_user_email_not_sent_inactive_user(self):
+        get_user_model().objects.create_user('mike123', 'mike@ixample.org', 'test123', is_active=False)
+        data = {'email': 'mike@ixample.org'}
+        form = ResetPasswordForm(data)
+        self.assertTrue(form.is_valid())
+        form.save(self.global_request)
+        self.assertEqual(len(mail.outbox), 0)
