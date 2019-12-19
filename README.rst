@@ -43,6 +43,22 @@ Documentation
 Stack Overflow
   http://stackoverflow.com/questions/tagged/django-allauth
 
+Fork for Django 1.11.x
+======================
+
+As Django 1.11.x is a LTS version of Django that will receive continued
+support until April 2020, I've decided to continue updating django-allauth
+with the most important security updates in the branch django1.11.
+
+To install in your project, use the following command:
+
+``pip install -e git://github.com/deegeenl/django-allauth.git@django1.11#egg=django-allauth``
+
+I will only cherry-pick security fixes from the ``master`` branch, and will make
+sure they are properly tested before pushing them to github, so you can safely
+re-run the above ``pip`` command.
+
+
 Rationale
 =========
 
