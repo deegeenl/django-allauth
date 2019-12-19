@@ -68,7 +68,7 @@ after_success:
 
 branches:
  only:
-  - master
+  - django1.11
 
 notifications:
   webhooks:
